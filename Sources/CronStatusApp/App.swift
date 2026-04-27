@@ -28,7 +28,8 @@ struct CronStatusApp: App {
         NSApplication.shared.setActivationPolicy(.accessory)
 
         // Explicitly set the bundle icon so cmd+tab shows it when .regular
-        if let icon = NSImage(named: "AppIcon") {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
             NSApplication.shared.applicationIconImage = icon
         }
 
