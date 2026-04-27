@@ -19,6 +19,11 @@ A lightweight macOS menu bar app that shows your cron jobs and Launch Agents at 
 
 ## Install
 
+> **Note:** The app is not notarized. After copying to Applications, macOS may show "damaged and can't be opened." Run this once to fix it:
+> ```bash
+> xattr -c /Applications/CronStatusApp.app
+> ```
+
 ### Option A — Build from source (recommended)
 
 ```bash
