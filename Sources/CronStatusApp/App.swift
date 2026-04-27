@@ -1,14 +1,36 @@
 import SwiftUI
 import AppKit
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var openWindow: (() -> Void)?
+
+    // Fired when user double-clicks the .app in Finder while already running
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { openWindow?() }
+        return false
+    }
+
+    // Keep running when all windows close — don't terminate
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+}
+
 @main
 struct CronStatusApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var cronManager  = CronManager()
     @StateObject private var agentManager = LaunchAgentManager()
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         // Start as accessory (no Dock icon, no cmd+tab entry)
         NSApplication.shared.setActivationPolicy(.accessory)
+
+        // Explicitly set the bundle icon so cmd+tab shows it when .regular
+        if let icon = NSImage(named: "AppIcon") {
+            NSApplication.shared.applicationIconImage = icon
+        }
 
         // Switch to .regular (shows in cmd+tab) when the dashboard window opens,
         // back to .accessory when all windows close.
@@ -30,6 +52,9 @@ struct CronStatusApp: App {
     }
 
     var body: some Scene {
+        // Wire delegate so Finder double-click opens the dashboard
+        let _ = { appDelegate.openWindow = { openWindow(id: "dashboard") } }()
+
         // ── Menu bar icon + dropdown ─────────────────────────────────────────
         MenuBarExtra {
             MenuBarView()
