@@ -64,7 +64,7 @@ final class LaunchAgentManager: ObservableObject {
     /// - Stopped agent → mtime of stdout/stderr log file (if configured in plist)
     private func resolveLastRun(entry: LaunchAgentEntry, startTimes: [Int: String]) -> String {
         if let pid = entry.pid, let t = startTimes[pid] {
-            return t
+            return "since \(t)"
         }
         let logPath = entry.standardOutPath ?? entry.standardErrPath
         if let raw = logPath {
