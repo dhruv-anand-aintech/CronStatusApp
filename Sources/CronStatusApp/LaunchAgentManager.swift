@@ -153,6 +153,16 @@ final class LaunchAgentManager: ObservableObject {
     func stopAgent(_ entry: LaunchAgentEntry) async -> (Bool, String) {
         await launchctl("stop", entry.label)
     }
+    func deleteAgent(_ entry: LaunchAgentEntry) async -> (Bool, String) {
+        _ = await unloadAgent(entry)
+        do {
+            try FileManager.default.removeItem(at: entry.plistURL)
+            return (true, "")
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     func restartAgent(_ entry: LaunchAgentEntry) async -> (Bool, String) {
         let uid = getuid()
         let (ok, msg) = await launchctl("kickstart", "-k", "gui/\(uid)/\(entry.label)")

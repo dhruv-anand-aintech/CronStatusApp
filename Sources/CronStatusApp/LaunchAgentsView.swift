@@ -9,6 +9,7 @@ struct LaunchAgentsView: View {
     @State private var showSystemAgents                                      = false
     @State private var sortOrder: [KeyPathComparator<LaunchAgentEntry>] = [KeyPathComparator(\LaunchAgentEntry.statusRank, order: .reverse)]
     @State private var actionError:      String?                             = nil
+    @State private var confirmDelete:    LaunchAgentEntry?                   = nil
     @State private var eventMonitor: Any? = nil
 
     private var filtered: [LaunchAgentEntry] {
@@ -165,6 +166,9 @@ struct LaunchAgentsView: View {
                         Button("Start")   { act { await agentManager.startAgent(agent) } }
                             .buttonStyle(.borderedProminent)
                     }
+                    // Delete plist
+                    Button("Delete…", role: .destructive) { confirmDelete = agent }
+                        .buttonStyle(.bordered)
                 }
                 Spacer()
                 Text("\(filtered.count) shown of \(agentManager.agents.count) total")
@@ -189,6 +193,21 @@ struct LaunchAgentsView: View {
         .onDisappear {
             if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
         }
+        // ── Delete confirmation ────────────────────────────────────────────────
+        .alert("Delete Agent?", isPresented: .init(
+            get: { confirmDelete != nil },
+            set: { if !$0 { confirmDelete = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let agent = confirmDelete {
+                    act { await agentManager.deleteAgent(agent) }
+                }
+                confirmDelete = nil
+            }
+            Button("Cancel", role: .cancel) { confirmDelete = nil }
+        } message: {
+            Text("This will unload \"\(confirmDelete?.label ?? "")\" and delete its plist file. This cannot be undone.")
+        }
         // ── Error alert ────────────────────────────────────────────────────────
         .alert("Action Failed", isPresented: .init(
             get: { actionError != nil },
@@ -204,12 +223,17 @@ struct LaunchAgentsView: View {
 
     @ViewBuilder
     private func statusImage(_ agent: LaunchAgentEntry) -> some View {
+        let shouldBeRunning = agent.startInterval != nil || agent.keepAlive
         if agent.pid != nil {
             Image(systemName: "circle.fill")
                 .foregroundStyle(.green).font(.system(size: 9))
         } else if let code = agent.lastExitStatus, code != 0 {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.red).font(.system(size: 9))
+        } else if agent.isLoaded && shouldBeRunning {
+            // Loaded, expects to be running periodically, but currently idle
+            Image(systemName: "circle.fill")
+                .foregroundStyle(.yellow).font(.system(size: 9))
         } else if agent.isLoaded {
             Image(systemName: "circle.dotted")
                 .foregroundStyle(.secondary).font(.system(size: 9))
