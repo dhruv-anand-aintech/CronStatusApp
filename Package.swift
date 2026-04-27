@@ -7,7 +7,8 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "CronStatusApp",
-            path: "Sources/CronStatusApp"
+            path: "Sources/CronStatusApp",
+            resources: [.copy("Resources/AppIcon.icns")]
         )
     ]
 )
