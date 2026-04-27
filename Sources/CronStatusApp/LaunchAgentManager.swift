@@ -5,13 +5,11 @@ final class LaunchAgentManager: ObservableObject {
     @Published var agents:    [LaunchAgentEntry] = []
     @Published var isLoading: Bool               = false
 
-    // Label prefixes that belong to Apple/system — hidden by default
     static let systemPrefixes = [
         "com.apple.", "com.openssh.", "org.cups.",
         "com.microsoft.autoupdate", "com.adobe.",
     ]
 
-    // Directories to scan, in order: (URL, isDaemon)
     private static let searchPaths: [(URL, Bool)] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
@@ -23,14 +21,11 @@ final class LaunchAgentManager: ObservableObject {
 
     var runningCount: Int { agents.filter { $0.pid != nil }.count }
 
-    // ── Public API ────────────────────────────────────────────────────────────
-
     func refresh() async {
         isLoading = true
         defer { isLoading = false }
 
-        // Both of these are fast (<50ms total): launchctl list + ps
-        async let runningTask   = fetchRunning()
+        async let runningTask    = fetchRunning()
         async let startTimesTask = fetchProcessStartTimes()
         let (running, startTimes) = await (runningTask, startTimesTask)
 
@@ -59,25 +54,23 @@ final class LaunchAgentManager: ObservableObject {
         return result
     }
 
-    /// Determine last run time without any log query:
-    /// - Running agent → process start time from `ps`
-    /// - Stopped agent → mtime of stdout/stderr log file (if configured in plist)
     private func resolveLastRun(entry: LaunchAgentEntry, startTimes: [Int: String]) -> String {
         if let pid = entry.pid, let t = startTimes[pid] {
             return "since \(t)"
         }
+        // mtime of stdout/stderr log file if configured in plist
         let logPath = entry.standardOutPath ?? entry.standardErrPath
         if let raw = logPath {
             let path = (raw as NSString).expandingTildeInPath
             if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                let mtime = attrs[.modificationDate] as? Date {
-                return formatDate(mtime)
+                return relativeTime(from: mtime)
             }
         }
         return "—"
     }
 
-    // ── Process start times via `ps` (instant) ────────────────────────────────
+    // ── Process start times via `ps` ─────────────────────────────────────────
 
     private func fetchProcessStartTimes() async -> [Int: String] {
         let (_, output) = await shell("ps -ax -o pid=,lstart= 2>/dev/null")
@@ -85,33 +78,23 @@ final class LaunchAgentManager: ObservableObject {
         for line in output.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
-            // Format: "  1330 Mon Mar 10 14:11:47 2026"
             let parts = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
             guard parts.count >= 5, let pid = Int(parts[0]) else { continue }
-            // parts[1..5]: "Mon Mar 10 14:11:47 2026"
             let dateStr = parts.dropFirst().joined(separator: " ")
             map[pid] = formatPsDate(dateStr)
         }
         return map
     }
 
-    /// "Mon Mar 10 14:11:47 2026" → relative string like "5s ago" / "3m ago" / "Mar 10 14:11"
     private func formatPsDate(_ s: String) -> String {
         let parts = s.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         guard parts.count >= 5 else { return s }
-        // parts: [weekday, month, day, time, year] e.g. ["Mon", "Mar", "10", "14:11:47", "2026"]
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "EEE MMM d HH:mm:ss yyyy"
         if let date = df.date(from: s) { return relativeTime(from: date) }
-        // fallback: show HH:MM
         let hhmm = parts[3].components(separatedBy: ":").prefix(2).joined(separator: ":")
         return "\(parts[1]) \(parts[2]) \(hhmm)"
-    }
-
-    /// Format a Date as relative time
-    private func formatDate(_ date: Date) -> String {
-        relativeTime(from: date)
     }
 
     private func relativeTime(from date: Date) -> String {
@@ -128,7 +111,7 @@ final class LaunchAgentManager: ObservableObject {
         return f.string(from: date)
     }
 
-    // ── launchctl list (fast) ─────────────────────────────────────────────────
+    // ── launchctl list ────────────────────────────────────────────────────────
 
     private func fetchRunning() async -> [String: (pid: Int?, status: Int?)] {
         let (_, output) = await shell("launchctl list 2>/dev/null")
@@ -167,7 +150,6 @@ final class LaunchAgentManager: ObservableObject {
             return (false, error.localizedDescription)
         }
     }
-
     func restartAgent(_ entry: LaunchAgentEntry) async -> (Bool, String) {
         let uid = getuid()
         let (ok, msg) = await launchctl("kickstart", "-k", "gui/\(uid)/\(entry.label)")

@@ -19,6 +19,25 @@ struct CronEntry: Identifiable, Equatable {
     /// Sort key: enabled=1, disabled=0
     var isEnabledRank: Int { isEnabled ? 1 : 0 }
 
+    /// Parse `>> /path/to/file` or `> /path/to/file` from the command, expanding ~
+    var logFilePath: String? {
+        guard let range = command.range(of: #">>?\s+(\S+)"#, options: .regularExpression) else { return nil }
+        let match = String(command[range])
+        let parts = match.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        guard parts.count >= 2 else { return nil }
+        let raw = parts[1]
+        if raw == "/dev/null" { return nil }
+        return (raw as NSString).expandingTildeInPath
+    }
+
+    /// mtime of the log file this cron job writes to, if it exists
+    var lastRunDate: Date? {
+        guard let path = logFilePath,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let mtime = attrs[.modificationDate] as? Date else { return nil }
+        return mtime
+    }
+
     // ── Computed display helpers ──────────────────────────────────────────────
 
     /// Basename of the first token of the command.

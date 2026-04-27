@@ -159,9 +159,26 @@ struct CronJobsView: View {
     }
 
     private func lastRunFor(_ entry: CronEntry) -> String {
+        // Best source: mtime of the log file the cron job writes to (>> /path)
+        if let date = entry.lastRunDate { return relativeTime(from: date) }
+        // Fallback: log scrape cache
         for (cmd, ts) in cronManager.lastRuns {
             if entry.command.contains(cmd) || cmd.contains(entry.command) { return ts }
         }
         return "—"
+    }
+
+    private func relativeTime(from date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 0    { return "just now" }
+        if secs < 60   { return "\(secs)s ago" }
+        let mins = secs / 60
+        if mins < 60   { return "\(mins)m ago" }
+        let hours = mins / 60
+        if hours < 24  { return "\(hours)h ago" }
+        let days = hours / 24
+        if days < 7    { return "\(days)d ago" }
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        return f.string(from: date)
     }
 }
