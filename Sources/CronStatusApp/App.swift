@@ -27,18 +27,16 @@ struct CronStatusApp: App {
         // Start as accessory (no Dock icon, no cmd+tab entry)
         NSApplication.shared.setActivationPolicy(.accessory)
 
-        // Explicitly set the bundle icon so cmd+tab shows it when .regular
-        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let icon = NSImage(contentsOf: url) {
-            NSApplication.shared.applicationIconImage = icon
-        }
-
-        // Switch to .regular (shows in cmd+tab) when the dashboard window opens,
-        // back to .accessory when all windows close.
+        // Switch to .regular (shows in cmd+tab) when the dashboard window opens.
+        // Icon must be set AFTER the policy switch — setting it before has no effect.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
         ) { _ in
             NSApplication.shared.setActivationPolicy(.regular)
+            if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+               let icon = NSImage(contentsOf: url) {
+                NSApplication.shared.applicationIconImage = icon
+            }
         }
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
