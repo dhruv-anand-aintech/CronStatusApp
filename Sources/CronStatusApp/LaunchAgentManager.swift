@@ -27,13 +27,15 @@ final class LaunchAgentManager: ObservableObject {
 
         async let runningTask    = fetchRunning()
         async let startTimesTask = fetchProcessStartTimes()
-        let (running, startTimes) = await (runningTask, startTimesTask)
+        async let runCountsTask  = fetchRunCounts()
+        let (running, startTimes, runCounts) = await (runningTask, startTimesTask, runCountsTask)
 
-        agents = buildAgents(running: running, startTimes: startTimes)
+        agents = buildAgents(running: running, startTimes: startTimes, runCounts: runCounts)
     }
 
     private func buildAgents(running: [String: (pid: Int?, status: Int?)],
-                              startTimes: [Int: String]) -> [LaunchAgentEntry] {
+                              startTimes: [Int: String],
+                              runCounts: [String: Int]) -> [LaunchAgentEntry] {
         var result: [LaunchAgentEntry] = []
         for (dirURL, isDaemon) in Self.searchPaths {
             guard let urls = try? FileManager.default.contentsOfDirectory(
@@ -47,8 +49,38 @@ final class LaunchAgentManager: ObservableObject {
                     entry.pid            = info.pid
                     entry.lastExitStatus = info.status
                 }
-                entry.lastRun = resolveLastRun(entry: entry, startTimes: startTimes)
+                entry.runCount = runCounts[entry.label]
+                entry.lastRun  = resolveLastRun(entry: entry, startTimes: startTimes)
                 result.append(entry)
+            }
+        }
+        return result
+    }
+
+    // ── Run counts via `launchctl print` ─────────────────────────────────────
+
+    private func fetchRunCounts() async -> [String: Int] {
+        let uid = getuid()
+        let (_, listOutput) = await shell("launchctl list 2>/dev/null")
+        let labels = listOutput.components(separatedBy: "\n").dropFirst().compactMap { line -> String? in
+            let parts = line.components(separatedBy: "\t")
+            return parts.count >= 3 && !parts[2].isEmpty ? parts[2] : nil
+        }
+        var result: [String: Int] = [:]
+        await withTaskGroup(of: (String, Int?).self) { group in
+            for label in labels {
+                group.addTask {
+                    let (_, info) = await shell("launchctl print gui/\(uid)/\(label) 2>/dev/null")
+                    for line in info.components(separatedBy: "\n") {
+                        let t = line.trimmingCharacters(in: .whitespaces)
+                        guard t.hasPrefix("runs ="), let v = Int(t.components(separatedBy: "=").last?.trimmingCharacters(in: .whitespaces) ?? "") else { continue }
+                        return (label, v)
+                    }
+                    return (label, nil)
+                }
+            }
+            for await (label, count) in group {
+                if let count { result[label] = count }
             }
         }
         return result

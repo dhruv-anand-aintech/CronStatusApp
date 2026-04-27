@@ -38,6 +38,81 @@ struct CronEntry: Identifiable, Equatable {
         return mtime
     }
 
+    /// Next fire date computed by iterating minutes from now (handles */N, ranges, lists, wildcards)
+    var nextRunDate: Date? {
+        guard isEnabled, isValid else { return nil }
+        if schedule == "@reboot" { return nil }
+        if let desc = Self.specials[schedule] {
+            // Map specials to equivalent 5-field for calculation
+            let mapped: String
+            switch schedule {
+            case "@hourly":             mapped = "0 * * * *"
+            case "@daily", "@midnight": mapped = "0 0 * * *"
+            case "@weekly":             mapped = "0 0 * * 0"
+            case "@monthly":            mapped = "0 0 1 * *"
+            case "@yearly", "@annually":mapped = "0 0 1 1 *"
+            default: return nil
+            }
+            _ = desc
+            return nextFire(minute: String(mapped.split(separator: " ")[0]),
+                            hour:   String(mapped.split(separator: " ")[1]),
+                            dom:    String(mapped.split(separator: " ")[2]),
+                            month:  String(mapped.split(separator: " ")[3]),
+                            dow:    String(mapped.split(separator: " ")[4]))
+        }
+        return nextFire(minute: minute, hour: hour, dom: dom, month: month, dow: dow)
+    }
+
+    private func nextFire(minute m: String, hour h: String, dom: String, month mo: String, dow dw: String) -> Date? {
+        let cal = Calendar(identifier: .gregorian)
+        var comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: Date())
+        comps.second = 0
+        // Start from next minute
+        comps.minute = (comps.minute ?? 0) + 1
+        guard var candidate = cal.date(from: comps) else { return nil }
+
+        for _ in 0..<(366 * 24 * 60) {
+            let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .weekday], from: candidate)
+            if matches(c.minute!, field: m) &&
+               matches(c.hour!,   field: h) &&
+               matches(c.day!,    field: dom) &&
+               matches(c.month!,  field: mo) &&
+               matchesDow(c.weekday! - 1, field: dw) {  // weekday: 1=Sun → 0-based
+                return candidate
+            }
+            candidate = candidate.addingTimeInterval(60)
+        }
+        return nil
+    }
+
+    private func matches(_ value: Int, field: String) -> Bool {
+        if field == "*" { return true }
+        for part in field.split(separator: ",") {
+            let s = String(part)
+            if s.hasPrefix("*/") {
+                if let step = Int(s.dropFirst(2)), step > 0, value % step == 0 { return true }
+            } else if s.contains("-") {
+                let bounds = s.split(separator: "-").compactMap { Int($0) }
+                if bounds.count == 2, value >= bounds[0], value <= bounds[1] { return true }
+            } else if let v = Int(s), v == value { return true }
+        }
+        return false
+    }
+
+    private func matchesDow(_ value: Int, field: String) -> Bool {
+        // Cron dow: 0 and 7 both mean Sunday
+        if field == "*" { return true }
+        for part in field.split(separator: ",") {
+            let s = String(part)
+            if let v = Int(s) { if v % 7 == value % 7 { return true } }
+            else if s.contains("-") {
+                let bounds = s.split(separator: "-").compactMap { Int($0) }
+                if bounds.count == 2, value >= bounds[0], value <= bounds[1] { return true }
+            }
+        }
+        return false
+    }
+
     // ── Computed display helpers ──────────────────────────────────────────────
 
     /// Basename of the first token of the command.

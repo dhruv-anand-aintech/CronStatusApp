@@ -68,58 +68,8 @@ struct LaunchAgentsView: View {
                     selection: $selection,
                     sortOrder: $sortOrder
                 ) {
-                    // Status indicator — sortable by running state
-                    TableColumn("", value: \LaunchAgentEntry.statusRank) { agent in
-                        statusImage(agent)
-                    }
-                    .width(22)
-
-                    TableColumn("Label", value: \.label) { agent in
-                        Text(agent.label)
-                            .lineLimit(1)
-                            .help(agent.label)   // tooltip for truncated labels
-                    }
-                    .width(min: 180, ideal: 320)
-
-                    TableColumn("PID") { agent in
-                        Text(agent.pid.map(String.init) ?? "—")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    .width(60)
-
-                    TableColumn("Exit") { agent in
-                        if let code = agent.lastExitStatus, code != 0 {
-                            Text(String(code)).foregroundStyle(.red)
-                                .font(.system(.body, design: .monospaced))
-                        } else {
-                            Text(agent.lastExitStatus.map(String.init) ?? "—")
-                                .foregroundStyle(.secondary)
-                                .font(.system(.body, design: .monospaced))
-                        }
-                    }
-                    .width(55)
-
-                    TableColumn("Trigger", value: \.triggerHuman) { agent in
-                        Text(agent.triggerHuman)
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 11))
-                    }
-                    .width(min: 80, ideal: 140)
-
-                    TableColumn("Source", value: \.sourceLabel) { agent in
-                        Text(agent.sourceLabel)
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 11))
-                    }
-                    .width(min: 70, ideal: 110)
-
-                    TableColumn("Last Run") { agent in
-                        Text(agent.lastRun)
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 11, design: .monospaced))
-                    }
-                    .width(min: 120, ideal: 160)
+                    tableColumnsA()
+                    tableColumnsB()
                 }
 
                 // ── Detail strip ───────────────────────────────────────────────
@@ -221,6 +171,69 @@ struct LaunchAgentsView: View {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    @TableColumnBuilder<LaunchAgentEntry, KeyPathComparator<LaunchAgentEntry>>
+    private func tableColumnsA() -> some TableColumnContent<LaunchAgentEntry, KeyPathComparator<LaunchAgentEntry>> {
+        TableColumn("", value: \LaunchAgentEntry.statusRank) { agent in
+            statusImage(agent)
+        }.width(22)
+
+        TableColumn("Label", value: \.label) { agent in
+            Text(agent.label).lineLimit(1).help(agent.label)
+        }.width(min: 180, ideal: 300)
+
+        TableColumn("PID") { agent in
+            Text(agent.pid.map(String.init) ?? "—")
+                .font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)
+        }.width(60)
+
+        TableColumn("Exit") { agent in
+            let code = agent.lastExitStatus
+            Text(code.map(String.init) ?? "—")
+                .foregroundStyle(code != nil && code != 0 ? .red : .secondary)
+                .font(.system(.body, design: .monospaced))
+        }.width(55)
+
+        TableColumn("Trigger", value: \.triggerHuman) { agent in
+            Text(agent.triggerHuman).foregroundStyle(.secondary).font(.system(size: 11))
+        }.width(min: 80, ideal: 140)
+    }
+
+    @TableColumnBuilder<LaunchAgentEntry, KeyPathComparator<LaunchAgentEntry>>
+    private func tableColumnsB() -> some TableColumnContent<LaunchAgentEntry, KeyPathComparator<LaunchAgentEntry>> {
+        TableColumn("Source", value: \.sourceLabel) { agent in
+            Text(agent.sourceLabel).foregroundStyle(.secondary).font(.system(size: 11))
+        }.width(min: 70, ideal: 110)
+
+        TableColumn("Last Run") { agent in
+            Text(agent.lastRun).foregroundStyle(.secondary).font(.system(size: 11, design: .monospaced))
+        }.width(min: 90, ideal: 120)
+
+        TableColumn("Next Run") { agent in
+            if agent.keepAlive && agent.pid == nil {
+                Text("on exit").foregroundStyle(.orange).font(.system(size: 11))
+            } else if let next = agent.nextRunDate {
+                Text(relativeTime(from: next)).foregroundStyle(.secondary).font(.system(size: 11, design: .monospaced))
+            } else {
+                Text("—").foregroundStyle(.secondary).font(.system(size: 11))
+            }
+        }.width(min: 80, ideal: 110)
+
+        TableColumn("Runs") { agent in
+            Text(agent.runCount.map(String.init) ?? "—")
+                .foregroundStyle(.secondary).font(.system(size: 11, design: .monospaced))
+        }.width(50)
+
+        TableColumn("Installed") { agent in
+            Text(agent.plistCreated.map { shortDate($0) } ?? "—")
+                .foregroundStyle(.secondary).font(.system(size: 11))
+        }.width(min: 70, ideal: 90)
+
+        TableColumn("Modified") { agent in
+            Text(agent.plistModified.map { shortDate($0) } ?? "—")
+                .foregroundStyle(.secondary).font(.system(size: 11))
+        }.width(min: 70, ideal: 90)
+    }
+
     @ViewBuilder
     private func statusImage(_ agent: LaunchAgentEntry) -> some View {
         let shouldBeRunning = agent.startInterval != nil || agent.keepAlive
@@ -241,6 +254,24 @@ struct LaunchAgentsView: View {
             Image(systemName: "circle")
                 .foregroundStyle(.secondary).font(.system(size: 9))
         }
+    }
+
+    private func relativeTime(from date: Date) -> String {
+        let secs = Int(date.timeIntervalSinceNow)
+        if secs <= 0   { return "overdue" }
+        if secs < 60   { return "in \(secs)s" }
+        let mins = secs / 60
+        if mins < 60   { return "in \(mins)m" }
+        let hours = mins / 60
+        if hours < 24  { return "in \(hours)h" }
+        let f = DateFormatter(); f.dateFormat = "MMM d"
+        return f.string(from: date)
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) ? "MMM d" : "MMM d, yyyy"
+        return f.string(from: date)
     }
 
     private func act(_ action: @escaping () async -> (Bool, String)) {

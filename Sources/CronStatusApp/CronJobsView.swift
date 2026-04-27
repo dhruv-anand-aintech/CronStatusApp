@@ -68,7 +68,35 @@ struct CronJobsView: View {
                                 .font(.system(size: 11, design: .monospaced))
                         }
                     }
-                    .width(min: 100, ideal: 150)
+                    .width(min: 90, ideal: 120)
+
+                    TableColumn("Next Run") { entry in
+                        if let next = entry.nextRunDate {
+                            Text(nextRelative(next))
+                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, design: .monospaced))
+                        } else if entry.schedule == "@reboot" {
+                            Text("on reboot").foregroundStyle(.secondary).font(.system(size: 11))
+                        } else {
+                            Text("—").foregroundStyle(.secondary).font(.system(size: 11))
+                        }
+                    }
+                    .width(min: 90, ideal: 120)
+
+                    TableColumn("Log File") { entry in
+                        if let path = entry.logFilePath {
+                            Button(URL(fileURLWithPath: path).lastPathComponent) {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
+                            .font(.system(size: 11))
+                            .help(path)
+                        } else {
+                            Text("—").foregroundStyle(.secondary).font(.system(size: 11))
+                        }
+                    }
+                    .width(min: 80, ideal: 140)
                 }
 
                 // ── Detail strip ───────────────────────────────────────────────
@@ -166,6 +194,18 @@ struct CronJobsView: View {
             if entry.command.contains(cmd) || cmd.contains(entry.command) { return ts }
         }
         return "—"
+    }
+
+    private func nextRelative(_ date: Date) -> String {
+        let secs = Int(date.timeIntervalSinceNow)
+        if secs <= 0   { return "now" }
+        if secs < 60   { return "in \(secs)s" }
+        let mins = secs / 60
+        if mins < 60   { return "in \(mins)m" }
+        let hours = mins / 60
+        if hours < 24  { return "in \(hours)h" }
+        let f = DateFormatter(); f.dateFormat = "MMM d HH:mm"
+        return f.string(from: date)
     }
 
     private func relativeTime(from date: Date) -> String {

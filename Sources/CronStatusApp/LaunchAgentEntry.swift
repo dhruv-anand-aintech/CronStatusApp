@@ -29,6 +29,35 @@ struct LaunchAgentEntry: Identifiable, Equatable {
         programArguments.isEmpty ? program : programArguments.joined(separator: " ")
     }
 
+    /// mtime of the plist file — when the agent was last installed/modified
+    var plistModified: Date? {
+        (try? FileManager.default.attributesOfItem(atPath: plistURL.path))?[.modificationDate] as? Date
+    }
+
+    /// Creation date of the plist file — when it was first installed
+    var plistCreated: Date? {
+        (try? FileManager.default.attributesOfItem(atPath: plistURL.path))?[.creationDate] as? Date
+    }
+
+    /// How many times launchd has started this agent (from launchctl print)
+    var runCount: Int? = nil
+
+    /// Next expected run date based on StartInterval + last log mtime, or nil if not periodic
+    var nextRunDate: Date? {
+        guard let interval = startInterval else { return nil }
+        // If running, next run is irrelevant (it will restart on exit or by interval)
+        if pid != nil { return nil }
+        // Use log mtime as last run anchor if available
+        let logPath = standardOutPath ?? standardErrPath
+        if let raw = logPath,
+           let attrs = try? FileManager.default.attributesOfItem(atPath: (raw as NSString).expandingTildeInPath),
+           let mtime = attrs[.modificationDate] as? Date {
+            let next = mtime.addingTimeInterval(TimeInterval(interval))
+            return next > Date() ? next : Date() // overdue = now
+        }
+        return nil
+    }
+
     var triggerHuman: String {
         var parts: [String] = []
         if runAtLoad                { parts.append("At load") }
