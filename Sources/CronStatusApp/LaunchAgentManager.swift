@@ -64,7 +64,7 @@ final class LaunchAgentManager: ObservableObject {
     /// - Stopped agent → mtime of stdout/stderr log file (if configured in plist)
     private func resolveLastRun(entry: LaunchAgentEntry, startTimes: [Int: String]) -> String {
         if let pid = entry.pid, let t = startTimes[pid] {
-            return "since \(t)"
+            return t
         }
         let logPath = entry.standardOutPath ?? entry.standardErrPath
         if let raw = logPath {
@@ -95,32 +95,37 @@ final class LaunchAgentManager: ObservableObject {
         return map
     }
 
-    /// "Mon Mar 10 14:11:47 2026" → "14:11" (today) or "Mar 10 14:11" (older)
+    /// "Mon Mar 10 14:11:47 2026" → relative string like "5s ago" / "3m ago" / "Mar 10 14:11"
     private func formatPsDate(_ s: String) -> String {
         let parts = s.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        guard parts.count >= 4 else { return s }
-        // parts: [weekday, month, day, time, year]
-        let month = parts[1], day = parts[2], timeStr = parts[3]
-        let hhmm  = timeStr.components(separatedBy: ":").prefix(2).joined(separator: ":")
-
-        let cal   = Calendar.current
-        let today = cal.component(.day,   from: Date())
-        let toMon = DateFormatter().shortMonthSymbols[cal.component(.month, from: Date()) - 1]
-        if parts[1] == toMon, Int(parts[2]) == today {
-            return hhmm
-        }
-        return "\(month) \(day) \(hhmm)"
+        guard parts.count >= 5 else { return s }
+        // parts: [weekday, month, day, time, year] e.g. ["Mon", "Mar", "10", "14:11:47", "2026"]
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "EEE MMM d HH:mm:ss yyyy"
+        if let date = df.date(from: s) { return relativeTime(from: date) }
+        // fallback: show HH:MM
+        let hhmm = parts[3].components(separatedBy: ":").prefix(2).joined(separator: ":")
+        return "\(parts[1]) \(parts[2]) \(hhmm)"
     }
 
-    /// Format a Date as "HH:MM" (today) or "Mar 10 HH:MM"
+    /// Format a Date as relative time
     private func formatDate(_ date: Date) -> String {
-        let cal = Calendar.current
-        let hhmm: String = {
-            let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: date)
-        }()
-        if cal.isDateInToday(date) { return hhmm }
+        relativeTime(from: date)
+    }
+
+    private func relativeTime(from date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 0    { return "just now" }
+        if secs < 60   { return "\(secs)s ago" }
+        let mins = secs / 60
+        if mins < 60   { return "\(mins)m ago" }
+        let hours = mins / 60
+        if hours < 24  { return "\(hours)h ago" }
+        let days = hours / 24
+        if days < 7    { return "\(days)d ago" }
         let f = DateFormatter(); f.dateFormat = "MMM d"
-        return "\(f.string(from: date)) \(hhmm)"
+        return f.string(from: date)
     }
 
     // ── launchctl list (fast) ─────────────────────────────────────────────────
