@@ -21,6 +21,7 @@ struct CronStatusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var cronManager  = CronManager()
     @StateObject private var agentManager = LaunchAgentManager()
+    @StateObject private var guardianManager = GuardianManager()
     @Environment(\.openWindow) private var openWindow
 
     init() {
@@ -59,6 +60,7 @@ struct CronStatusApp: App {
             MenuBarView()
                 .environmentObject(cronManager)
                 .environmentObject(agentManager)
+                .environmentObject(guardianManager)
         } label: {
             HStack(spacing: 3) {
                 Image(systemName: "clock")
@@ -74,6 +76,13 @@ struct CronStatusApp: App {
                 // Trigger initial load immediately on launch, not on first menu open
                 await agentManager.refresh()
                 await cronManager.refresh()
+                
+                // Start periodic guardian checks
+                while true {
+                    try? await Task.sleep(nanoseconds: 30 * 1_000_000_000) // 30 seconds
+                    await agentManager.refresh()
+                    await guardianManager.checkAgents(agents: agentManager.agents, agentManager: agentManager)
+                }
             }
         }
         .menuBarExtraStyle(.window)
@@ -83,6 +92,7 @@ struct CronStatusApp: App {
             DashboardView()
                 .environmentObject(cronManager)
                 .environmentObject(agentManager)
+                .environmentObject(guardianManager)
                 .frame(minWidth: 860, minHeight: 520)
         }
         .defaultSize(width: 1020, height: 700)

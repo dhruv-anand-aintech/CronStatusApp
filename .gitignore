@@ -2,3 +2,6 @@ CronStatusApp.dmg
 dmg_tmp/
 AppIcon.iconset/
 dmg_tmp/
+.DS_Store
+.build/
+AppIcon.icns

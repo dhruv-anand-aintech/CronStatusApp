@@ -3,6 +3,7 @@ import AppKit
 
 struct LaunchAgentsView: View {
     @EnvironmentObject var agentManager: LaunchAgentManager
+    @EnvironmentObject var guardianManager: GuardianManager
 
     @State private var selection:        String?                              = nil
     @State private var filterText                                             = ""
@@ -176,6 +177,15 @@ struct LaunchAgentsView: View {
         TableColumn("", value: \LaunchAgentEntry.statusRank) { agent in
             statusImage(agent)
         }.width(22)
+
+        TableColumn("Guard") { agent in
+            Toggle("", isOn: Binding(
+                get: { guardianManager.isGuarded(agent.label) },
+                set: { _ in guardianManager.toggleGuarding(for: agent.label, agents: agentManager.agents) }
+            ))
+            .toggleStyle(.checkbox)
+            .help("Notify if process stops or errors appear in logs")
+        }.width(40)
 
         TableColumn("Label", value: \.label) { agent in
             Text(agent.label).lineLimit(1).help(agent.label)
