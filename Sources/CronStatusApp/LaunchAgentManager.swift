@@ -61,7 +61,7 @@ final class LaunchAgentManager: ObservableObject {
 
     private func fetchRunCounts() async -> [String: Int] {
         let uid = getuid()
-        let (_, listOutput) = await shell("launchctl list 2>/dev/null")
+        let (_, listOutput) = await runProcess("/bin/launchctl", arguments: ["list"])
         let labels = listOutput.components(separatedBy: "\n").dropFirst().compactMap { line -> String? in
             let parts = line.components(separatedBy: "\t")
             return parts.count >= 3 && !parts[2].isEmpty ? parts[2] : nil
@@ -70,7 +70,7 @@ final class LaunchAgentManager: ObservableObject {
         await withTaskGroup(of: (String, Int?).self) { group in
             for label in labels {
                 group.addTask {
-                    let (_, info) = await shell("launchctl print gui/\(uid)/\(label) 2>/dev/null")
+                    let (_, info) = await runProcess("/bin/launchctl", arguments: ["print", "gui/\(uid)/\(label)"])
                     for line in info.components(separatedBy: "\n") {
                         let t = line.trimmingCharacters(in: .whitespaces)
                         guard t.hasPrefix("runs ="), let v = Int(t.components(separatedBy: "=").last?.trimmingCharacters(in: .whitespaces) ?? "") else { continue }
@@ -146,7 +146,7 @@ final class LaunchAgentManager: ObservableObject {
     // ── launchctl list ────────────────────────────────────────────────────────
 
     private func fetchRunning() async -> [String: (pid: Int?, status: Int?)] {
-        let (_, output) = await shell("launchctl list 2>/dev/null")
+        let (_, output) = await runProcess("/bin/launchctl", arguments: ["list"])
         var map: [String: (pid: Int?, status: Int?)] = [:]
         for line in output.components(separatedBy: "\n").dropFirst() {
             let parts = line.components(separatedBy: "\t")
@@ -193,8 +193,7 @@ final class LaunchAgentManager: ObservableObject {
 
     @discardableResult
     private func launchctl(_ args: String...) async -> (Bool, String) {
-        let cmd = (["launchctl"] + args).joined(separator: " ")
-        let (code, out) = await shell(cmd)
+        let (code, out) = await runProcess("/bin/launchctl", arguments: args)
         return (code == 0, out.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
