@@ -20,6 +20,26 @@ func shell(_ command: String) async -> (exitCode: Int32, output: String) {
     }
 }
 
+/// Run an executable directly without shell interpolation.
+func runProcess(_ executable: String, arguments: [String] = []) async -> (exitCode: Int32, output: String) {
+    await withCheckedContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+            do    { try process.run() }
+            catch { continuation.resume(returning: (-1, error.localizedDescription)); return }
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            continuation.resume(returning: (process.terminationStatus, output))
+        }
+    }
+}
+
 /// Run a shell command with data written to its stdin.
 func shellWithInput(_ command: String, input: String) async -> (exitCode: Int32, output: String) {
     await withCheckedContinuation { continuation in
