@@ -6,8 +6,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Fired when user double-clicks the .app in Finder while already running
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { openWindow?() }
-        return false
+        if !hasVisibleWindows {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow?()
+        }
+        return true
     }
 
     // Keep running when all windows close — don't terminate
@@ -27,25 +30,32 @@ struct CronStatusApp: App {
     init() {
         // Start as accessory (no Dock icon, no cmd+tab entry)
         NSApplication.shared.setActivationPolicy(.accessory)
+        let dashboardTitle = "Cron & Launch Agent Monitor"
 
-        // Switch to .regular (shows in cmd+tab) when the dashboard window opens.
-        // Icon must be set AFTER the policy switch — setting it before has no effect.
+        // Promote only the dashboard. MenuBarExtra also creates key windows, but
+        // those transient popovers must not make the app appear in the Dock.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
-        ) { _ in
-            NSApplication.shared.setActivationPolicy(.regular)
+        ) { notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title == dashboardTitle else { return }
+            NSApp.setActivationPolicy(.regular)
             if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
                let icon = NSImage(contentsOf: url) {
-                NSApplication.shared.applicationIconImage = icon
+                NSApp.applicationIconImage = icon
             }
         }
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
-        ) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                let visible = NSApplication.shared.windows.filter { $0.isVisible && !$0.isMiniaturized }
-                if visible.isEmpty {
-                    NSApplication.shared.setActivationPolicy(.accessory)
+        ) { notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title == dashboardTitle else { return }
+            DispatchQueue.main.async {
+                let dashboardVisible = NSApp.windows.contains {
+                    $0.title == dashboardTitle && $0.isVisible && !$0.isMiniaturized
+                }
+                if !dashboardVisible {
+                    NSApp.setActivationPolicy(.accessory)
                 }
             }
         }

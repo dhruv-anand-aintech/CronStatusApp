@@ -12,8 +12,8 @@ func shell(_ command: String) async -> (exitCode: Int32, output: String) {
             process.standardError  = pipe
             do    { try process.run() }
             catch { continuation.resume(returning: (-1, error.localizedDescription)); return }
-            process.waitUntilExit()
             let data   = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
             let output = String(data: data, encoding: .utf8) ?? ""
             continuation.resume(returning: (process.terminationStatus, output))
         }
@@ -32,8 +32,8 @@ func runProcess(_ executable: String, arguments: [String] = []) async -> (exitCo
             process.standardError = pipe
             do    { try process.run() }
             catch { continuation.resume(returning: (-1, error.localizedDescription)); return }
-            process.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
             let output = String(data: data, encoding: .utf8) ?? ""
             continuation.resume(returning: (process.terminationStatus, output))
         }
@@ -58,8 +58,8 @@ func shellWithInput(_ command: String, input: String) async -> (exitCode: Int32,
                 inPipe.fileHandleForWriting.write(data)
             }
             inPipe.fileHandleForWriting.closeFile()
-            process.waitUntilExit()
             let data   = outPipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
             let output = String(data: data, encoding: .utf8) ?? ""
             continuation.resume(returning: (process.terminationStatus, output))
         }
